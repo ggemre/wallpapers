@@ -12,54 +12,62 @@
   }: let
     systems = ["x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin"];
   in {
-    packages = nixpkgs.lib.genAttrs systems (system: let
-      pkgs = import nixpkgs {inherit system;};
-      remoteWallpaperFlake = "github:ggemre/wallpapers"; # Change to . for local dev
-      wallpaperDir = ./images;
+    packages = nixpkgs.lib.genAttrs systems (
+      system: let
+        pkgs = import nixpkgs {inherit system;};
+        wallpaperDir = ./images;
 
-      randomWallpaperScript = pkgs.writeScriptBin "randomwallpaper" ''
-        #!${pkgs.stdenv.shell}
-        set -euo pipefail
-        theme="''${1:-default}"
-        wp_dir="$(${pkgs.nix}/bin/nix eval --raw ${remoteWallpaperFlake}#packages.${system}.default)/share/wallpapers"
-        find "$wp_dir/$theme" -maxdepth 3 -type f | shuf -n 1 | head -n 1
-      '';
+        wallpaperPackage = pkgs.stdenv.mkDerivation {
+          name = "wallpapers";
+          src = wallpaperDir;
+          installPhase = ''
+            mkdir -p $out/share/wallpapers
+            cp -r $src/* $out/share/wallpapers/
+          '';
+        };
 
-      wallpaperScript = pkgs.writeScriptBin "wallpaper" ''
-        #!${pkgs.stdenv.shell}
-        set -euo pipefail
-        name="$1"
-        wp_dir="$(nix eval --raw ${remoteWallpaperFlake}#packages.${system}.default)/share/wallpapers"
-        echo "$wp_dir/$name"
-      '';
-    in {
-      default = pkgs.stdenv.mkDerivation {
-        name = "wallpapers";
-        src = wallpaperDir;
-        installPhase = ''
-          mkdir -p $out/share/wallpapers
-          cp -r $src/* $out/share/wallpapers/
+        wallpaperPath = pkgs.runCommand "wallpaper-path" {} ''
+          mkdir -p $out
+          ln -s ${wallpaperPackage}/share/wallpapers $out
         '';
-      };
 
-      # Return a random wallpaper, optionally provide a theme to filter by
-      random-wallpaper = pkgs.symlinkJoin {
-        name = "randomwallpaper";
-        paths = [
-          pkgs.coreutils
-          pkgs.findutils
-          randomWallpaperScript
-        ];
-      };
+        randomWallpaperScript = pkgs.writeScriptBin "randomwallpaper" ''
+          #!${pkgs.stdenv.shell}
+          set -euo pipefail
+          theme="''${1:-default}"
+          find "${wallpaperPackage}/share/wallpapers/$theme" -maxdepth 3 -type f | shuf -n 1 | head -n 1
+        '';
 
-      # Return a specific wallpaper given a path
-      wallpaper = pkgs.symlinkJoin {
-        name = "wallpaper";
-        paths = [
-          pkgs.coreutils
-          wallpaperScript
-        ];
-      };
-    });
+        # TODO: this does not validate that the path exists
+        wallpaperScript = pkgs.writeScriptBin "wallpaper" ''
+          #!${pkgs.stdenv.shell}
+          set -euo pipefail
+          name="$1"
+          echo "${wallpaperPackage}/share/wallpapers/$name"
+        '';
+      in {
+        default = wallpaperPackage;
+        wallpaperPath = wallpaperPath;
+
+        # Return a random wallpaper, optionally filter by theme
+        random-wallpaper = pkgs.symlinkJoin {
+          name = "randomwallpaper";
+          paths = [
+            pkgs.coreutils
+            pkgs.findutils
+            randomWallpaperScript
+          ];
+        };
+
+        # Return a specific wallpaper given a path
+        wallpaper = pkgs.symlinkJoin {
+          name = "wallpaper";
+          paths = [
+            pkgs.coreutils
+            wallpaperScript
+          ];
+        };
+      }
+    );
   };
 }
