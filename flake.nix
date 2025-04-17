@@ -14,13 +14,14 @@
   in {
     packages = nixpkgs.lib.genAttrs systems (system: let
       pkgs = import nixpkgs {inherit system;};
+      remoteWallpaperFlake = "github:ggemre/wallpapers"; # Change to . for local dev
       wallpaperDir = ./images;
 
       randomWallpaperScript = pkgs.writeScriptBin "randomwallpaper" ''
         #!${pkgs.stdenv.shell}
         set -euo pipefail
         theme="''${1:-default}"
-        wp_dir="$(${pkgs.nix}/bin/nix eval --raw .#packages.${system}.default)/share/wallpapers"
+        wp_dir="$(${pkgs.nix}/bin/nix eval --raw ${remoteWallpaperFlake}#packages.${system}.default)/share/wallpapers"
         find "$wp_dir/$theme" -maxdepth 3 -type f | shuf -n 1 | head -n 1
       '';
 
@@ -28,7 +29,7 @@
         #!${pkgs.stdenv.shell}
         set -euo pipefail
         name="$1"
-        wp_dir="$(nix eval --raw .#packages.${system}.default)/share/wallpapers"
+        wp_dir="$(nix eval --raw ${remoteWallpaperFlake}#packages.${system}.default)/share/wallpapers"
         echo "$wp_dir/$name"
       '';
     in {
